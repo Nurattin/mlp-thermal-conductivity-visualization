@@ -15,19 +15,19 @@
 
 ### Основной экран
 
-![Основной экран визуализации MLP](docs/screenshots/overview.jpg)
+<img src="./docs/screenshots/overview.png" alt="Основной экран визуализации MLP" width="100%">
 
 ### Формулы вычисления
 
-![Блок формул прямого и обратного прохода](docs/screenshots/formulas.jpg)
+<img src="./docs/screenshots/formulas.png" alt="Блок формул прямого и обратного прохода" width="100%">
 
 ## Структура
 
 ```text
 .
 ├── docs/screenshots/
-│   ├── overview.jpg   # основной экран визуализации
-│   └── formulas.jpg   # блок формул вычисления
+│   ├── overview.png   # основной экран визуализации
+│   └── formulas.png   # блок формул вычисления
 ├── index.html       # основная интерактивная визуализация
 ├── mlp_dataset.js   # встроенный датасет для демонстрации
 ├── package.json     # удобный локальный запуск через npm
