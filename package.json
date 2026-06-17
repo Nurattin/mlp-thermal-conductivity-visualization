@@ -1,0 +1,19 @@
+{
+  "name": "mlp-forward-animation",
+  "version": "1.0.0",
+  "private": false,
+  "description": "Interactive MLP forward-pass visualization for rock thermal conductivity prediction.",
+  "scripts": {
+    "start": "npx serve ."
+  },
+  "keywords": [
+    "mlp",
+    "neural-network",
+    "visualization",
+    "petrophysics",
+    "thermal-conductivity"
+  ],
+  "author": "Nurattin",
+  "license": "UNLICENSED",
+  "devDependencies": {}
+}

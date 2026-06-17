@@ -1,0 +1,1048 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Интерактивная визуализация MLP</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
+  <style>
+    :root{
+      --bg:#eef1f6; --panel:#fff; --ink:#16203a; --muted:#65748a; --line:#c4cdda;
+      --active:#2f6fbd; --accent:#b05849; --green:#1f7d57; --green-soft:#e4f4ec;
+      --pos:#c75b4a; --neg:#3f7fc4; --warn:#c98a1a;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0;font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);
+      background:radial-gradient(1200px 500px at 20% -10%,#f7faff 0%,rgba(247,250,255,0) 60%),var(--bg);}
+    main{max-width:1340px;margin:0 auto;padding:22px;}
+    h1{margin:0 0 6px;font-size:27px;font-weight:800;letter-spacing:-.2px;}
+    .subtitle{margin:0 0 14px;color:var(--muted);font-size:15.5px;line-height:1.45;}
+
+    /* top toolbar */
+    .toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:14px;margin:0 0 14px;}
+    .arch{display:flex;align-items:center;flex-wrap:wrap;gap:7px;font-size:13.5px;}
+    .arch .pill{display:inline-flex;flex-direction:column;align-items:center;gap:1px;background:var(--panel);
+      border:1px solid #d7deea;border-radius:10px;padding:6px 12px;box-shadow:0 4px 10px rgba(28,39,58,.05);min-width:66px;}
+    .arch .pill b{font-size:16px;font-weight:800;}
+    .arch .pill span{font-size:10.5px;color:var(--muted);}
+    .arch .arrow{color:var(--muted);font-size:16px;}
+    .arch .pill.hid b{color:var(--active);} .arch .pill.out b{color:var(--green);}
+
+    .modebox{display:flex;align-items:center;gap:10px;margin-left:auto;}
+    .seg{display:inline-flex;background:#e6ebf2;border-radius:10px;padding:3px;border:1px solid #d4dbe6;}
+    .seg button{border:0;background:transparent;color:var(--muted);font-weight:700;font-size:13.5px;
+      padding:8px 14px;border-radius:8px;cursor:pointer;}
+    .seg button.on{background:#fff;color:var(--ink);box-shadow:0 2px 6px rgba(28,39,58,.12);}
+    .mb-btn{border:1px solid #b8c2cf;background:#fff;border-radius:9px;padding:9px 13px;font-size:13.5px;
+      font-weight:700;cursor:pointer;}
+    .mb-btn:hover{background:#f3f6fa;}
+
+    .layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;}
+    .stage,.side{background:var(--panel);border:1px solid #d7deea;border-radius:12px;
+      box-shadow:0 14px 30px rgba(28,39,58,.07);}
+    .stage{overflow:hidden;min-height:800px;position:relative;}
+    svg{width:100%;height:800px;display:block;}
+
+    .head{font-size:16px;font-weight:800;fill:var(--ink);}
+    .head-sub{font-size:12px;font-weight:600;fill:var(--muted);}
+    .caption{font-size:12px;fill:var(--muted);}
+    .layer-card{fill:#f4f7fc;stroke:#dde5f1;stroke-width:1.5;transition:.25s;}
+    .layer-card.active{fill:#eaf3ff;stroke:#b9d4f4;}
+
+    .node{stroke:var(--line);stroke-width:2.5;fill:url(#gNeutral);transition:fill .2s,stroke .2s,filter .2s,opacity .2s;}
+    .node.active{stroke:var(--active);fill:url(#gActive);filter:drop-shadow(0 5px 10px rgba(47,111,189,.25));}
+    .node.output.active{stroke:var(--green);fill:url(#gGreen);filter:drop-shadow(0 8px 18px rgba(31,125,87,.25));}
+    .node.dropped{fill:#e9edf2 !important;stroke:#b9c2cf !important;stroke-dasharray:4 3;filter:none !important;opacity:.85;}
+    .node-title{font-size:16px;font-weight:800;fill:var(--ink);pointer-events:none;}
+    .node-sub{font-size:12px;font-weight:700;fill:var(--muted);pointer-events:none;}
+    .node-sub.dropped{fill:#aab4c2;}
+    .dropx{font-size:26px;font-weight:800;fill:#9aa7b8;pointer-events:none;}
+    .ellipsis{font-size:22px;font-weight:800;fill:#9aa7b8;}
+
+    .chip-box{fill:#fff;stroke:#cdd8e8;stroke-width:1.5;transition:.25s;}
+    .chip-box.active{stroke:var(--active);fill:#f3f8ff;}
+    .chip-main{font-size:13.5px;font-weight:800;fill:var(--active);}
+    .chip-line{font-size:11px;font-weight:600;fill:var(--muted);}
+    .chip-count{font-size:11px;font-weight:700;fill:var(--accent);}
+
+    /* compute row — математика шага (прямой проход) */
+    .compute-box{fill:#fbfdff;stroke:#dbe4f0;stroke-width:1.3;transition:.25s;}
+    .compute-head{font-size:10px;font-weight:800;fill:var(--active);text-transform:uppercase;letter-spacing:.02em;}
+    .compute-f{font-size:10.2px;font-weight:600;fill:#33414f;font-family:"SF Mono","Courier New",monospace;}
+    .compute-col.active .compute-box{stroke:var(--accent);fill:#fbf3f1;filter:drop-shadow(0 4px 10px rgba(176,88,73,.16));}
+    .compute-col.active .compute-head{fill:var(--accent);}
+    .compute-col.active .compute-f{fill:#27405f;}
+
+    /* строка математики обратного прохода (backprop) */
+    .back-box{fill:#f7f4fe;stroke:#d9cef6;stroke-width:1.3;}
+    .back-head{font-size:10px;font-weight:800;fill:#7c3aed;text-transform:uppercase;letter-spacing:.02em;}
+    .back-f{font-size:10.2px;font-weight:600;fill:#3a2d5c;font-family:"SF Mono","Courier New",monospace;}
+
+    .edge{transition:opacity .2s,stroke-width .2s;}
+    .edge.grad{stroke:#7c3aed !important;stroke-opacity:.95 !important;stroke-width:2.8 !important;
+      stroke-dasharray:7 5;animation:flowback .55s linear infinite;}
+    @keyframes flowback{to{stroke-dashoffset:24;}}
+    .node.grad-node{stroke:#7c3aed !important;fill:#efe9fb !important;filter:drop-shadow(0 4px 10px rgba(124,58,237,.25)) !important;}
+    .wlabel{font-size:9.5px;font-weight:700;paint-order:stroke;stroke:#ffffff;stroke-width:2.4px;}
+
+    .footnote{font-size:12.5px;font-weight:600;fill:var(--muted);}
+    .legend-t{font-size:11.5px;font-weight:700;fill:var(--muted);}
+
+    .side{min-height:680px;padding:18px;display:flex;flex-direction:column;}
+    .step-num{color:var(--accent);font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;}
+    .step-title{margin:0 0 8px;font-size:20px;line-height:1.2;font-weight:800;}
+    .step-text{margin:0 0 12px;color:#36414f;font-size:14.5px;line-height:1.5;}
+    .calc{background:#0f1b2e;color:#d8e6fb;border-radius:8px;padding:12px 13px;font-family:"SF Mono","Courier New",monospace;
+      font-size:12.8px;line-height:1.55;white-space:pre-wrap;margin-bottom:12px;}
+    .calc .g{color:#7fd1a6;} .calc .y{color:#f2c879;} .calc .b{color:#7fb6f2;}
+    .formula-box{border:1px solid #dfe7f2;border-radius:8px;background:#f8fafd;padding:9px 10px;}
+    .formula-line{font-family:"SF Mono","Courier New",monospace;font-size:11.8px;line-height:1.55;color:#263445;
+      padding:5px 0;border-bottom:1px solid #e8eef6;}
+    .formula-line:last-child{border-bottom:0;}
+    .formula-line b{color:var(--active);}
+    .formula-desc{display:block;margin-top:2px;font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+      font-size:11.4px;line-height:1.35;color:var(--muted);}
+
+    .module{margin-bottom:12px;}
+    .mod-title{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:7px;}
+    .mod-title .dot{width:9px;height:9px;border-radius:50%;}
+
+    /* SHAP bars */
+    .bar-row{display:grid;grid-template-columns:96px 1fr 44px;align-items:center;gap:8px;margin-bottom:7px;font-size:12.5px;}
+    .bar-track{height:13px;background:#eef2f7;border-radius:7px;overflow:hidden;}
+    .bar-fill{height:100%;border-radius:7px;background:linear-gradient(90deg,#2f6fbd,#5fa0e6);}
+    .bar-val{text-align:right;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;}
+
+    /* weight heatmap */
+    .heat-wrap{border:1px solid #e2e8f1;border-radius:8px;padding:9px;background:#fafbfd;}
+    .heat-grid{display:grid;gap:2px;}
+    .heat-cell{aspect-ratio:1;border-radius:2px;}
+    .heat-legend{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:var(--muted);}
+    .heat-bar{flex:1;height:9px;border-radius:5px;background:linear-gradient(90deg,#3f7fc4,#eef2f7 50%,#c75b4a);}
+
+    .relu-wrap{border:1px solid #e2e8f1;border-radius:8px;padding:9px 9px 6px;background:#fafbfd;}
+    #reluPlot{display:block;height:118px;width:100%;}
+    .relu-cap{font-size:11.5px;color:var(--muted);margin-top:4px;text-align:center;}
+    .relu-cap b{color:var(--ink);font-variant-numeric:tabular-nums;}
+    .relu-axis{stroke:#c2ccd9;stroke-width:1;}
+    .relu-curve{fill:none;stroke:#2f6fbd;stroke-width:2.4;}
+    .relu-guide{stroke:#b05849;stroke-width:1.2;stroke-dasharray:3 2;}
+    .relu-dot{fill:#b05849;}
+    .relu-lbl{font-size:9px;fill:#8a97a6;}
+
+    /* BN box */
+    .bn-line{font-family:"SF Mono","Courier New",monospace;font-size:12.3px;line-height:1.7;color:#33414f;}
+    .bn-line b{color:var(--active);}
+    .pill-stat{display:inline-block;background:#eef4fc;border:1px solid #d6e3f4;border-radius:6px;
+      padding:1px 7px;font-weight:700;font-variant-numeric:tabular-nums;}
+
+    /* dropout status */
+    .drop-stat{display:flex;align-items:center;gap:10px;font-size:13px;}
+    .drop-badge{font-weight:800;font-size:15px;padding:4px 10px;border-radius:8px;}
+    .drop-on{background:#fdeeee;color:#b04a3c;border:1px solid #f1c9c2;}
+    .drop-off{background:#eef6f0;color:#1f7d57;border:1px solid #c7e6d3;}
+
+    /* metrics */
+    .metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+    .metric{background:#f6f8fb;border:1px solid #e3e9f1;border-radius:9px;padding:9px 11px;}
+    .metric b{display:block;font-size:21px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums;}
+    .metric span{font-size:11px;color:var(--muted);}
+
+    .note{border-left:4px solid var(--accent);padding:10px 12px;background:#faf7f5;color:#3d4650;
+      font-size:12.8px;line-height:1.5;border-radius:0 8px 8px 0;margin-bottom:12px;}
+
+    .controls{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:auto;padding-top:6px;}
+    button.nav{border:1px solid #b8c2cf;background:#fff;color:var(--ink);border-radius:8px;padding:10px;
+      font-size:14.5px;font-weight:600;cursor:pointer;}
+    button.nav:hover{background:#f3f6fa;}
+    button.nav.primary{border-color:var(--accent);background:var(--accent);color:#fff;}
+    .progress{grid-column:1/-1;height:7px;background:#e5eaf1;border-radius:999px;overflow:hidden;}
+    .bar{width:0;height:100%;background:linear-gradient(90deg,var(--accent),#d6796a);transition:width .25s;}
+
+    .scroll{overflow-y:auto;flex:1;margin:-4px -4px 0;padding:4px;}
+
+    .train-btn{border-color:#1f7d57;background:#1f7d57;color:#fff;}
+    .train-btn:hover{background:#1a6b4a;}
+    .train-btn:disabled{opacity:.6;cursor:default;}
+    .train-btn.done{background:#fff;color:#1f7d57;}
+
+    .trainhud{position:absolute;top:90px;right:16px;width:262px;background:rgba(255,255,255,.97);
+      border:1px solid #cfe0d6;border-radius:11px;padding:12px 13px;box-shadow:0 10px 26px rgba(20,40,30,.14);
+      backdrop-filter:blur(2px);}
+    .th-title{font-size:13px;font-weight:800;color:#1f7d57;}
+    .th-sub{font-size:10.5px;color:var(--muted);margin:2px 0 8px;}
+    #lossCanvas{width:100%;height:86px;display:block;background:#f6f9f7;border:1px solid #e1ece5;border-radius:7px;}
+    .th-stats{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-top:7px;}
+    .th-stats b{color:var(--ink);font-variant-numeric:tabular-nums;}
+
+    /* ===== блок всех формул в LaTeX (большой шрифт) ===== */
+    .formulas-all{margin-top:18px;background:var(--panel);border:1px solid #d7deea;border-radius:12px;
+      box-shadow:0 14px 30px rgba(28,39,58,.07);padding:20px 24px;}
+    .fa-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;flex-wrap:wrap;}
+    .fa-head h2{margin:0;font-size:23px;font-weight:800;letter-spacing:-.2px;}
+    .fa-sub{margin:0 0 16px;color:var(--muted);font-size:14px;line-height:1.45;}
+    .fa-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px;align-items:start;}
+    .fa-group{border:1px solid #e2e8f1;border-radius:11px;padding:14px 18px;background:#fafbfd;}
+    .fa-group h3{margin:0 0 6px;font-size:14.5px;font-weight:800;color:var(--active);
+      text-transform:uppercase;letter-spacing:.02em;}
+    .fa-item{padding:13px 0;border-bottom:1px solid #eef2f7;}
+    .fa-item:last-child{border-bottom:0;}
+    .fa-formula{overflow-x:auto;overflow-y:hidden;padding:4px 0;}
+    .fa-formula .katex{font-size:1.85em;color:#16203a;}
+    .fa-formula .katex-display{margin:0;text-align:left;}
+    .fa-desc{margin-top:7px;font-size:12.8px;color:var(--muted);line-height:1.45;}
+    .fa-hidden{display:none;}
+
+    @media (max-width:1060px){
+      main{padding:14px;} .layout{grid-template-columns:1fr;}
+      svg{height:600px;} .stage,.side{min-height:auto;} .modebox{margin-left:0;width:100%;}
+      .trainhud{position:static;width:auto;margin:10px;}
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Интерактивная визуализация MLP</h1>
+    <p class="subtitle">Прямой проход, веса связей, Batch Normalization и Dropout. Прогноз коэффициента теплопроводности&nbsp;λ по четырём признакам породы.</p>
+
+    <div class="toolbar">
+      <div class="arch">
+        <span class="pill in"><b>4</b><span>входа</span></span><span class="arrow">→</span>
+        <span class="pill hid"><b>128</b><span>Dense·BN·ReLU·Drop 0.2</span></span><span class="arrow">→</span>
+        <span class="pill hid"><b>64</b><span>·Drop 0.2</span></span><span class="arrow">→</span>
+        <span class="pill hid"><b>32</b><span>·Drop 0.1</span></span><span class="arrow">→</span>
+        <span class="pill out"><b>1</b><span>λ̂</span></span>
+        <span class="pill"><b>11 905</b><span>параметров</span></span>
+      </div>
+      <div class="modebox">
+        <div class="seg" id="modeSeg">
+          <button data-mode="train" class="on">Обучение</button>
+          <button data-mode="infer">Инференс</button>
+        </div>
+        <button class="mb-btn" id="shuffle">Новый mini-batch</button>
+        <button class="mb-btn train-btn" id="trainBtn">Обучить на реальных данных</button>
+      </div>
+    </div>
+
+    <section class="layout">
+      <div class="stage">
+        <svg viewBox="0 0 1000 805" role="img" aria-label="MLP с тремя скрытыми слоями">
+          <defs>
+            <linearGradient id="gNeutral" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#eef2f8"/></linearGradient>
+            <linearGradient id="gActive" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eaf3ff"/><stop offset="1" stop-color="#cfe4fb"/></linearGradient>
+            <linearGradient id="gGreen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8f7ef"/><stop offset="1" stop-color="#c9ecd9"/></linearGradient>
+          </defs>
+
+          <rect class="layer-card l-h1" x="262" y="92" width="148" height="430" rx="16"></rect>
+          <rect class="layer-card l-h2" x="452" y="92" width="148" height="430" rx="16"></rect>
+          <rect class="layer-card l-h3" x="642" y="92" width="148" height="430" rx="16"></rect>
+
+          <text x="100" y="60" class="head" text-anchor="middle">Входные признаки</text>
+          <text x="100" y="78" class="head-sub" text-anchor="middle">4 значения породы</text>
+          <text x="336" y="60" class="head" text-anchor="middle">Скрытый слой 1</text>
+          <text x="526" y="60" class="head" text-anchor="middle">Скрытый слой 2</text>
+          <text x="716" y="60" class="head" text-anchor="middle">Скрытый слой 3</text>
+          <text x="905" y="60" class="head" text-anchor="middle">Выход</text>
+          <text x="905" y="78" class="head-sub" text-anchor="middle">регрессия λ</text>
+
+          <g id="edges-0"></g><g id="edges-1"></g><g id="edges-2"></g><g id="edges-3"></g>
+          <g id="wlabels"></g>
+          <g id="inputs"></g><g id="h1"></g><g id="h2"></g><g id="h3"></g><g id="output"></g>
+
+          <g id="chips">
+            <rect class="chip-box c-h1" x="276" y="532" width="120" height="58" rx="9"></rect>
+            <text class="chip-main" x="336" y="551" text-anchor="middle">Dense 128</text>
+            <text class="chip-line" x="336" y="567" text-anchor="middle">BN · ReLU · Drop 0.2</text>
+            <text class="chip-count" x="336" y="583" text-anchor="middle">веса 4×128 = 640</text>
+            <rect class="chip-box c-h2" x="466" y="532" width="120" height="58" rx="9"></rect>
+            <text class="chip-main" x="526" y="551" text-anchor="middle">Dense 64</text>
+            <text class="chip-line" x="526" y="567" text-anchor="middle">BN · ReLU · Drop 0.2</text>
+            <text class="chip-count" x="526" y="583" text-anchor="middle">веса 128×64 = 8256</text>
+            <rect class="chip-box c-h3" x="656" y="532" width="120" height="58" rx="9"></rect>
+            <text class="chip-main" x="716" y="551" text-anchor="middle">Dense 32</text>
+            <text class="chip-line" x="716" y="567" text-anchor="middle">BN · ReLU · Drop 0.1</text>
+            <text class="chip-count" x="716" y="583" text-anchor="middle">веса 64×32 = 2080</text>
+          </g>
+
+          <!-- математика каждого шага (прямой проход) -->
+          <text id="mathHead" x="40" y="612" class="head-sub" style="font-weight:800">Прямой проход — математика шага:</text>
+          <g id="computeRow">
+            <g class="compute-col" id="cap-in">
+              <rect class="compute-box" x="12" y="620" width="176" height="98" rx="9"></rect>
+              <text class="compute-head" x="100" y="638" text-anchor="middle">Вход · стандартизация</text>
+              <text class="compute-f" x="100" y="657" text-anchor="middle">x = [Φ, Vp, S, L]</text>
+              <text class="compute-f" x="100" y="675" text-anchor="middle">μⱼ, σⱼ — среднее, СКО</text>
+              <text class="compute-f" x="100" y="693" text-anchor="middle">zⱼ = (xⱼ − μⱼ) / σⱼ</text>
+            </g>
+            <g class="compute-col" id="cap-h1">
+              <rect class="compute-box" x="246" y="620" width="180" height="98" rx="9"></rect>
+              <text class="compute-head" x="336" y="638" text-anchor="middle">Слой 1 · Dense 128</text>
+              <text class="compute-f" x="336" y="657" text-anchor="middle">u = W₁·z + b₁</text>
+              <text class="compute-f" x="336" y="675" text-anchor="middle">û = γ(u−μB)/√(σB²+ε)+β</text>
+              <text class="compute-f" x="336" y="693" text-anchor="middle">a = ReLU(û) = max(0, û)</text>
+              <text class="compute-f" x="336" y="711" text-anchor="middle">h₁ = (m⊙a)/(1−p), p=0.2</text>
+            </g>
+            <g class="compute-col" id="cap-h2">
+              <rect class="compute-box" x="436" y="620" width="180" height="98" rx="9"></rect>
+              <text class="compute-head" x="526" y="638" text-anchor="middle">Слой 2 · Dense 64</text>
+              <text class="compute-f" x="526" y="657" text-anchor="middle">u = W₂·h₁ + b₂</text>
+              <text class="compute-f" x="526" y="675" text-anchor="middle">û = γ(u−μB)/√(σB²+ε)+β</text>
+              <text class="compute-f" x="526" y="693" text-anchor="middle">a = ReLU(û) = max(0, û)</text>
+              <text class="compute-f" x="526" y="711" text-anchor="middle">h₂ = (m⊙a)/(1−p), p=0.2</text>
+            </g>
+            <g class="compute-col" id="cap-h3">
+              <rect class="compute-box" x="626" y="620" width="180" height="98" rx="9"></rect>
+              <text class="compute-head" x="716" y="638" text-anchor="middle">Слой 3 · Dense 32</text>
+              <text class="compute-f" x="716" y="657" text-anchor="middle">u = W₃·h₂ + b₃</text>
+              <text class="compute-f" x="716" y="675" text-anchor="middle">û = γ(u−μB)/√(σB²+ε)+β</text>
+              <text class="compute-f" x="716" y="693" text-anchor="middle">a = ReLU(û) = max(0, û)</text>
+              <text class="compute-f" x="716" y="711" text-anchor="middle">h₃ = (m⊙a)/(1−p), p=0.1</text>
+            </g>
+            <g class="compute-col" id="cap-out">
+              <rect class="compute-box" x="815" y="620" width="180" height="98" rx="9"></rect>
+              <text class="compute-head" x="905" y="638" text-anchor="middle">Выход · регрессия λ</text>
+              <text class="compute-f" x="905" y="657" text-anchor="middle">λ̂ = Wₒ·h₃ + bₒ</text>
+              <text class="compute-f" x="905" y="675" text-anchor="middle">L = (1/n)·Σ(λ − λ̂)²</text>
+              <text class="compute-f" x="905" y="693" text-anchor="middle">g = ∂L/∂θ  (backprop)</text>
+              <text class="compute-f" x="905" y="711" text-anchor="middle">θ ← θ − η·m̂/(√v̂+ε)</text>
+            </g>
+          </g>
+
+          <!-- математика обратного прохода (поток ошибки δ, справа налево) -->
+          <text id="backHead" x="40" y="612" class="head-sub" style="font-weight:800;fill:#7c3aed" display="none">Обратный проход — поток ошибки δ (справа налево):</text>
+          <g id="backRow" display="none">
+            <g>
+              <rect class="back-box" x="815" y="620" width="180" height="98" rx="9"></rect>
+              <text class="back-head" x="905" y="638" text-anchor="middle">① ошибка на выходе</text>
+              <text class="back-f" x="905" y="659" text-anchor="middle">L = (1/n)·Σ(λ − λ̂)²</text>
+              <text class="back-f" x="905" y="679" text-anchor="middle">δ_out = ∂L/∂λ̂</text>
+              <text class="back-f" x="905" y="699" text-anchor="middle">= −(2/n)·(λ − λ̂)</text>
+            </g>
+            <g>
+              <rect class="back-box" x="626" y="620" width="180" height="98" rx="9"></rect>
+              <text class="back-head" x="716" y="638" text-anchor="middle">② δ слоя 3</text>
+              <text class="back-f" x="716" y="662" text-anchor="middle">δ₃ = (Wₒᵀ·δ_out)</text>
+              <text class="back-f" x="716" y="685" text-anchor="middle">⊙ [û₃ &gt; 0]</text>
+            </g>
+            <g>
+              <rect class="back-box" x="436" y="620" width="180" height="98" rx="9"></rect>
+              <text class="back-head" x="526" y="638" text-anchor="middle">③ δ слоя 2</text>
+              <text class="back-f" x="526" y="662" text-anchor="middle">δ₂ = (W₃ᵀ·δ₃)</text>
+              <text class="back-f" x="526" y="685" text-anchor="middle">⊙ [û₂ &gt; 0]</text>
+            </g>
+            <g>
+              <rect class="back-box" x="246" y="620" width="180" height="98" rx="9"></rect>
+              <text class="back-head" x="336" y="638" text-anchor="middle">④ δ слоя 1</text>
+              <text class="back-f" x="336" y="662" text-anchor="middle">δ₁ = (W₂ᵀ·δ₂)</text>
+              <text class="back-f" x="336" y="685" text-anchor="middle">⊙ [û₁ &gt; 0]</text>
+            </g>
+            <g>
+              <rect class="back-box" x="12" y="620" width="176" height="98" rx="9"></rect>
+              <text class="back-head" x="100" y="638" text-anchor="middle">⑤ обновление весов</text>
+              <text class="back-f" x="100" y="659" text-anchor="middle">∂L/∂Wₗ = δₗ·hₗ₋₁ᵀ</text>
+              <text class="back-f" x="100" y="679" text-anchor="middle">∂L/∂bₗ = δₗ</text>
+              <text class="back-f" x="100" y="699" text-anchor="middle">θ ← θ−η·m̂/(√v̂+ε)</text>
+            </g>
+          </g>
+
+          <!-- weight legend -->
+          <g id="legend">
+            <text x="40" y="746" class="legend-t">Цвет ребра — знак веса:</text>
+            <line x1="190" y1="742" x2="220" y2="742" stroke="#c75b4a" stroke-width="3"></line>
+            <text x="226" y="746" class="legend-t" style="fill:#c75b4a">w &gt; 0</text>
+            <line x1="270" y1="742" x2="300" y2="742" stroke="#3f7fc4" stroke-width="3"></line>
+            <text x="306" y="746" class="legend-t" style="fill:#3f7fc4">w &lt; 0</text>
+            <text x="356" y="746" class="legend-t">толщина — |w|</text>
+            <line x1="470" y1="742" x2="500" y2="742" stroke="#7c3aed" stroke-width="3" stroke-dasharray="6 4"></line>
+            <text x="506" y="746" class="legend-t" style="fill:#7c3aed">поток градиента (backprop)</text>
+          </g>
+
+          <text x="40" y="772" class="footnote"><tspan font-weight="800">Φ</tspan> — пористость, <tspan font-weight="800">Vp</tspan> — скорость P-волн, <tspan font-weight="800">S</tspan> — насыщение, <tspan font-weight="800">L</tspan> — литология</text>
+          <text x="40" y="792" class="footnote">m — маска Dropout, ⊙ — поэлементное умножение, γ,β,μB,σB — параметры BatchNorm; веса на рёбрах — <tspan id="wfootnote" font-weight="800">схематичные</tspan>.</text>
+        </svg>
+        <div class="trainhud" id="trainhud" hidden>
+          <div class="th-title">Обучение на реальных данных</div>
+          <div class="th-sub">899 образцов · TensorFlow.js · этот прогон в браузере</div>
+          <canvas id="lossCanvas" width="240" height="86"></canvas>
+          <div class="th-stats">
+            <span>эпоха <b id="thEpoch">0/60</b></span>
+            <span>loss <b id="thLoss">—</b></span>
+          </div>
+          <div class="th-stats">
+            <span>val MAE <b id="thMae">—</b></span>
+            <span>val R² <b id="thR2">—</b></span>
+          </div>
+        </div>
+      </div>
+
+      <aside class="side">
+        <div class="step-num" id="stepNum">Шаг 1 из 5</div>
+        <h2 class="step-title" id="stepTitle">Входные признаки</h2>
+        <div class="scroll">
+          <p class="step-text" id="stepText"></p>
+          <div class="calc" id="calc"></div>
+
+          <!-- contextual modules -->
+          <div class="module" id="mSHAP" hidden>
+            <div class="mod-title">Важность входов · SHAP (реальные данные)</div>
+            <div id="shapBars"></div>
+          </div>
+
+          <div class="module" id="mBN" hidden>
+            <div class="mod-title">Batch Normalization</div>
+            <div class="bn-line" id="bnBox"></div>
+          </div>
+
+          <div class="module" id="mReLU" hidden>
+            <div class="mod-title">Активация ReLU = max(0, z)</div>
+            <div class="relu-wrap">
+              <svg id="reluPlot" viewBox="0 0 210 124" width="100%"></svg>
+              <div class="relu-cap" id="reluCap"></div>
+            </div>
+          </div>
+
+          <div class="module" id="mDrop" hidden>
+            <div class="mod-title">Dropout</div>
+            <div class="drop-stat" id="dropBox"></div>
+          </div>
+
+          <div class="module" id="mWeights" hidden>
+            <div class="mod-title">Веса слоя</div>
+            <div class="heat-wrap">
+              <div class="heat-grid" id="heatGrid"></div>
+              <div class="heat-legend"><span>−</span><div class="heat-bar"></div><span>+</span><span id="heatCap" style="margin-left:6px"></span></div>
+            </div>
+          </div>
+
+          <div class="module" id="mFormulaRef" hidden>
+            <div class="mod-title">Формулы этапа</div>
+            <div class="formula-box" id="formulaBox"></div>
+          </div>
+
+          <div class="module" id="mOut" hidden>
+            <div class="mod-title">Результат модели (тест)</div>
+            <div class="metric-grid">
+              <div class="metric"><b>0.239</b><span>MAE, Вт/(м·К)</span></div>
+              <div class="metric"><b>0.308</b><span>RMSE, Вт/(м·К)</span></div>
+              <div class="metric"><b>0.516</b><span>R²</span></div>
+              <div class="metric"><b>9.66%</b><span>MAPE</span></div>
+            </div>
+          </div>
+
+          <div class="note" id="note"></div>
+        </div>
+
+        <div class="controls">
+          <button class="nav" id="prev">Назад</button>
+          <button class="nav primary" id="next">Далее</button>
+          <button class="nav" id="auto">Авто</button>
+          <button class="nav" id="reset">Сброс</button>
+          <div class="progress"><div class="bar" id="bar"></div></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="formulas-all">
+      <div class="fa-head">
+        <h2>Все формулы вычисления</h2>
+        <button class="mb-btn" id="faToggle">Скрыть формулы</button>
+      </div>
+      <p class="fa-sub">Полный набор уравнений, участвующих в прямом проходе, расчёте ошибки, обратном распространении и обновлении весов — в виде LaTeX.</p>
+      <div class="fa-grid" id="faGrid"></div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+  <script src="mlp_dataset.js"></script>
+  <script>
+    const SVGNS="http://www.w3.org/2000/svg";
+    const el=(t,a={},txt)=>{const e=document.createElementNS(SVGNS,t);for(const k in a)e.setAttribute(k,a[k]);if(txt!=null)e.textContent=txt;return e;};
+    function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+    // geometry
+    const INPUT_ROWS=[175,265,355,445], ROWS=[175,265,355,475], OUT_Y=310;
+    const COLX={in:100,h1:336,h2:526,h3:716,out:905};
+    const inputs=[{s:'Φ',v:'16 %'},{s:'Vp',v:'4200 м/с'},{s:'S',v:'насыщ.'},{s:'L',v:'известняк'}];
+    const layers=[
+      {id:'h1',x:336,rows:ROWS,last:'h₁₂₈',drop:0.2},
+      {id:'h2',x:526,rows:ROWS,last:'h₆₄',drop:0.2},
+      {id:'h3',x:716,rows:ROWS,last:'h₃₂',drop:0.1},
+    ];
+
+    // ---- build input nodes ----
+    (function(){const g=document.getElementById('inputs');
+      inputs.forEach((n,i)=>{const y=INPUT_ROWS[i];
+        g.appendChild(el('circle',{class:'node input-node',cx:COLX.in,cy:y,r:38}));
+        g.appendChild(el('text',{class:'node-title',x:COLX.in,y:y-3,'text-anchor':'middle'},n.s));
+        g.appendChild(el('text',{class:'node-sub',x:COLX.in,y:y+16,'text-anchor':'middle'},n.v));
+      });
+    })();
+    // ---- build hidden nodes ----
+    layers.forEach(L=>{const g=document.getElementById(L.id);
+      const labels=['h₁','h₂','h₃',L.last];
+      L.rows.forEach((y,i)=>{
+        g.appendChild(el('circle',{class:'node '+L.id+'-node',id:L.id+'-'+i,cx:L.x,cy:y,r:30}));
+        g.appendChild(el('text',{class:'node-sub',id:L.id+'-t-'+i,x:L.x,y:y+5,'text-anchor':'middle'},labels[i]));
+        g.appendChild(el('text',{class:'dropx',id:L.id+'-x-'+i,x:L.x,y:y+9,'text-anchor':'middle',display:'none'},'✕'));
+      });
+      g.appendChild(el('text',{class:'ellipsis',x:L.x,y:420,'text-anchor':'middle'},'⋮'));
+    });
+    // ---- output ----
+    (function(){const g=document.getElementById('output');
+      g.appendChild(el('circle',{class:'node output output-node',cx:COLX.out,cy:OUT_Y,r:52}));
+      g.appendChild(el('text',{class:'node-title',x:COLX.out,y:OUT_Y-8,'text-anchor':'middle',style:'font-size:22px'},'λ̂'));
+      g.appendChild(el('text',{class:'node-sub',x:COLX.out,y:OUT_Y+16,'text-anchor':'middle'},'2.64'));
+      g.appendChild(el('text',{class:'node-sub',x:COLX.out,y:OUT_Y+33,'text-anchor':'middle',style:'font-size:11px'},'Вт/(м·К)'));
+    })();
+
+    // ---- edges with schematic weights ----
+    const rng=mulberry32(20240617);
+    const wcolor=w=> w>=0?'#c75b4a':'#3f7fc4';
+    const segs=[
+      {g:'edges-0',x1:138,x2:306,a:INPUT_ROWS,b:ROWS},
+      {g:'edges-1',x1:366,x2:496,a:ROWS,b:ROWS},
+      {g:'edges-2',x1:556,x2:686,a:ROWS,b:ROWS},
+    ];
+    const edgeStore=[]; // per layer-segment array of {line,w,bi,ai}
+    segs.forEach((s,si)=>{const g=document.getElementById(s.g);const arr=[];
+      s.a.forEach((y1,ai)=>s.b.forEach((y2,bi)=>{
+        const w=+(rng()*2-1).toFixed(2);
+        const ln=el('line',{x1:s.x1,y1:y1,x2:s.x2,y2:y2,class:'edge',
+          stroke:wcolor(w),'stroke-width':(0.8+Math.abs(w)*2.6).toFixed(2),'stroke-opacity':(0.3+Math.abs(w)*0.4).toFixed(2)});
+        g.appendChild(ln);arr.push({ln,w,mag:Math.abs(w),ai,bi,y1,y2,x1:s.x1,x2:s.x2});
+      }));edgeStore.push(arr);
+    });
+    // h3 -> output
+    (function(){const g=document.getElementById('edges-3');const arr=[];
+      ROWS.forEach((y1,ai)=>{const w=+(rng()*2-1).toFixed(2);
+        const ln=el('line',{x1:746,y1:y1,x2:853,y2:OUT_Y,class:'edge',
+          stroke:wcolor(w),'stroke-width':(0.8+Math.abs(w)*2.6).toFixed(2),'stroke-opacity':(0.3+Math.abs(w)*0.4).toFixed(2)});
+        g.appendChild(ln);arr.push({ln,w,mag:Math.abs(w),ai,bi:0,y1,y2:OUT_Y,x1:746,x2:853});
+      });edgeStore.push(arr);
+    })();
+
+    // ===== state =====
+    let step=0, mode='train', batchSeed=23, timer=null, backTimer=null;
+    let trained=false, training=false, realW=null, realBN=null, tfModel=null, predLambda=null;
+    let bnOut=0; // выход BatchNorm — он же вход ReLU (для вставки-графика)
+    const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+    let featMean=[], featStd=[], yMean=0, yStd=1;
+    const lossHist=[];
+    const EXAMPLE=[16, 4200, 1, 1]; // Φ %, Vp м/с, насыщение=1, литология=1 (известняк) — как на схеме
+    const dropMask={h1:[false,false,false,false],h2:[false,false,false,false],h3:[false,false,false,false]};
+    function sampleDropout(){
+      const r=mulberry32(batchSeed*2654435761>>>0);
+      layers.forEach(L=>{dropMask[L.id]=L.rows.map(()=> mode==='train' ? (r()<L.drop) : false);});
+    }
+    sampleDropout();
+
+    // SHAP real data
+    const shap=[{n:'Vp (P-волны)',v:0.1207},{n:'L (литология)',v:0.1152},{n:'S (насыщение)',v:0.1129},{n:'Φ (пористость)',v:0.1037}];
+    (function(){const max=Math.max(...shap.map(s=>s.v));const box=document.getElementById('shapBars');
+      shap.forEach(s=>{const row=document.createElement('div');row.className='bar-row';
+        row.innerHTML=`<span>${s.n}</span><div class="bar-track"><div class="bar-fill" style="width:${(s.v/max*100).toFixed(0)}%"></div></div><span class="bar-val">${s.v.toFixed(3)}</span>`;
+        box.appendChild(row);});
+    })();
+
+    const steps=[
+      {key:'in',title:'Входные признаки',
+       text:'Модель получает четыре признака породы. Их относительная важность измерена методом SHAP — реальные значения показаны ниже.',
+       calc:'x = [Φ, Vp, S, L]\nzⱼ = (xⱼ − μⱼ) / σⱼ\nŷ = fθ(z)',
+       formulas:[
+        '<b>x</b> = [Φ, Vp, S, L]<span class="formula-desc">Описывает исходный вектор признаков: пористость, скорость P-волн, насыщение и литологию породы.</span>',
+        '<b>zⱼ</b> = (xⱼ − μⱼ) / σⱼ<span class="formula-desc">Переводит каждый признак в безразмерную шкалу: вычитается среднее значение и делится на стандартное отклонение.</span>',
+        '<b>ŷ</b> = fθ(z), где θ = {W, b, γ, β}<span class="formula-desc">Обозначает всю нейронную сеть как функцию: на вход подаются нормированные признаки, а параметры θ обучаются по данным.</span>',
+        'SHAP: |φⱼ| показывает вклад признака в прогноз<span class="formula-desc">Чем больше среднее абсолютное значение SHAP, тем сильнее данный признак влияет на предсказание λ.</span>'
+       ],
+       note:'Это численное описание образца, подаваемое на вход MLP. Все входы стандартизуются перед обучением.',
+       mods:['mSHAP','mFormulaRef'], active:['input-node'], edges:-1, cards:[], chips:[]},
+      {key:'h1',title:'Скрытый слой 1: Dense 128',layer:'h1',
+       text:'Полносвязный слой строит 128 комбинаций входов: u = W·x + b. Цвет ребра — знак веса, толщина — его модуль.',
+       calc:'u₁ = <span class="b">W₁·z</span> + b₁\nBN(u₁) = γ₁·(u₁ − μB)/√(σB² + ε) + β₁\nh₁ = Dropout( ReLU( BN(u₁) ) )',
+       formulas:[
+        '<b>u₁</b> = W₁·z + b₁<span class="formula-desc">Показывает линейное смешивание входных признаков: веса W₁ задают силу связей, b₁ сдвигает результат.</span>',
+        '<b>BN(u₁)</b> = γ₁·(u₁ − μB)/√(σB² + ε) + β₁<span class="formula-desc">Batch Normalization стабилизирует распределение значений внутри mini-batch; γ₁ и β₁ возвращают модели гибкость масштаба и сдвига.</span>',
+        '<b>a₁</b> = ReLU(BN(u₁)) = max(0, BN(u₁))<span class="formula-desc">ReLU оставляет положительные сигналы и обнуляет отрицательные, добавляя нелинейность в модель.</span>',
+        '<b>h₁</b> = m₁ ⊙ a₁ / (1 − p), p = 0.2<span class="formula-desc">Dropout случайно выключает часть нейронов при обучении, чтобы сеть не запоминала обучающую выборку слишком буквально.</span>'
+       ],
+       note:'Веса связей определяют, как признаки смешиваются. BN нормализует, ReLU вносит нелинейность, Dropout регуляризует.',
+       mods:['mWeights','mBN','mReLU','mDrop','mFormulaRef'], active:['input-node','h1-node'], edges:0, cards:['l-h1'], chips:['c-h1']},
+      {key:'h2',title:'Скрытый слой 2: Dense 64',layer:'h2',
+       text:'Второй слой сжимает представление до 64 признаков, работая с выходом первого слоя.',
+       calc:'u₂ = <span class="b">W₂·h₁</span> + b₂\nBN(u₂) = γ₂·(u₂ − μB)/√(σB² + ε) + β₂\nh₂ = Dropout( ReLU( BN(u₂) ) )',
+       formulas:[
+        '<b>u₂</b> = W₂·h₁ + b₂<span class="formula-desc">Второй слой работает уже не с исходными признаками, а с 128 скрытыми признаками, найденными первым слоем.</span>',
+        '<b>a₂</b> = max(0, BN(u₂))<span class="formula-desc">После нормализации отрицательные комбинации подавляются, а положительные передаются дальше как активные признаки.</span>',
+        '<b>h₂</b> = m₂ ⊙ a₂ / (1 − p), p = 0.2<span class="formula-desc">Маска m₂ задаёт, какие нейроны временно отключены; деление на (1 − p) сохраняет средний масштаб активаций.</span>',
+        'Размерности: W₂ ∈ R^(128×64), h₂ ∈ R^64<span class="formula-desc">Слой сжимает представление: из 128 признаков формируется 64 более компактных признака породы.</span>'
+       ],
+       note:'Сужение 128 → 64 → 32 формирует всё более компактное описание породы.',
+       mods:['mWeights','mBN','mReLU','mDrop','mFormulaRef'], active:['h1-node','h2-node'], edges:1, cards:['l-h2'], chips:['c-h2']},
+      {key:'h3',title:'Скрытый слой 3: Dense 32',layer:'h3',
+       text:'Третий слой даёт итоговое компактное представление размерности 32 перед выходом.',
+       calc:'u₃ = <span class="b">W₃·h₂</span> + b₃\nBN(u₃) = γ₃·(u₃ − μB)/√(σB² + ε) + β₃\nh₃ = Dropout₀.₁( ReLU( BN(u₃) ) )',
+       formulas:[
+        '<b>u₃</b> = W₃·h₂ + b₃<span class="formula-desc">Третий слой агрегирует 64 скрытых признака во вход для финального прогноза.</span>',
+        '<b>a₃</b> = max(0, BN(u₃))<span class="formula-desc">Нелинейная активация помогает описывать сложные зависимости теплопроводности от свойств породы.</span>',
+        '<b>h₃</b> = m₃ ⊙ a₃ / (1 − p), p = 0.1<span class="formula-desc">На последнем скрытом слое Dropout слабее, потому что представление уже компактное и близко к выходу модели.</span>',
+        'Размерности: W₃ ∈ R^(64×32), h₃ ∈ R^32<span class="formula-desc">После этого шага остаётся 32 итоговых скрытых признака, из которых строится прогноз λ.</span>'
+       ],
+       note:'Здесь Dropout ослаблен до 0.1 — ближе к выходу регуляризация мягче.',
+       mods:['mWeights','mBN','mReLU','mDrop','mFormulaRef'], active:['h2-node','h3-node'], edges:2, cards:['l-h3'], chips:['c-h3']},
+      {key:'out',title:'Выход: прогноз λ',
+       text:'Линейный нейрон превращает скрытое представление в одно число — прогноз теплопроводности. Качество модели на тесте — справа.',
+       calc:'λ̂ = <span class="b">Wₒ·h₃</span> + bₒ   →   <span class="g">2.64</span> Вт/(м·К)\nMSE = (1/n)·Σ(λ − λ̂)²\nMAE = (1/n)·Σ|λ − λ̂|\nAdam: m_t, v_t → θ ← θ − η·m̂_t/(√v̂_t + ε)',
+       formulas:[
+        '<b>λ̂</b> = Wₒ·h₃ + bₒ<span class="formula-desc">Финальный линейный нейрон переводит 32 скрытых признака в одно число — прогноз теплопроводности.</span>',
+        '<b>MSE</b> = (1/n)·Σ(λᵢ − λ̂ᵢ)²<span class="formula-desc">Показывает, как считаются ошибки: большие отклонения штрафуются сильнее из-за возведения в квадрат.</span>',
+        '<b>RMSE</b> = √MSE, <b>MAE</b> = (1/n)·Σ|λᵢ − λ̂ᵢ|<span class="formula-desc">RMSE возвращает ошибку к исходным единицам, а MAE показывает среднюю абсолютную ошибку в Вт/(м·К).</span>',
+        '<b>R²</b> = 1 − SSres/SStot<span class="formula-desc">Коэффициент детерминации показывает, какую долю разброса целевой величины объясняет модель.</span>',
+        'Adam: m_t = β₁m_{t−1} + (1−β₁)g_t; v_t = β₂v_{t−1} + (1−β₂)g_t²<span class="formula-desc">Оптимизатор Adam накапливает средний градиент и его квадрат, чтобы адаптивно обновлять параметры сети.</span>'
+       ],
+       note:'Задача регрессии: на выходе одно вещественное значение. MLP сопоставим с градиентным бустингом на этих данных.',
+       mods:['mOut','mFormulaRef'], active:['h3-node','output-node'], edges:3, cards:[], chips:[]},
+      {key:'back',title:'Обратный проход: backprop + Adam',
+       text:'Ошибка с выхода распространяется назад по сети (поток рёбер — справа налево). Для каждого слоя по цепному правилу считается градиент δ, затем веса обновляются оптимизатором Adam.',
+       calc:'δ_out = ∂L/∂λ̂ = −(2/n)·(λ − λ̂)\nδₗ = (Wₗ₊₁ᵀ · δₗ₊₁) ⊙ [ûₗ > 0]\n∂L/∂Wₗ = δₗ · hₗ₋₁ᵀ ,  ∂L/∂bₗ = δₗ\nθ ← θ − η · m̂ₜ / (√v̂ₜ + ε)',
+       formulas:[
+        '<b>δ_out</b> = ∂L/∂λ̂ = −(2/n)·(λ − λ̂)<span class="formula-desc">Ошибка на выходе — производная функции потерь MSE по прогнозу λ̂. С неё начинается обратный проход.</span>',
+        '<b>δₗ</b> = (Wₗ₊₁ᵀ · δₗ₊₁) ⊙ [ûₗ &gt; 0]<span class="formula-desc">Градиент слоя l: ошибка следующего слоя «протягивается» назад через транспонированные веса Wₗ₊₁ᵀ и производную ReLU (1, если ûₗ&gt;0, иначе 0).</span>',
+        '<b>∂L/∂Wₗ</b> = δₗ · hₗ₋₁ᵀ<span class="formula-desc">Градиент по весам слоя — внешнее произведение его ошибки δₗ и активаций предыдущего слоя hₗ₋₁.</span>',
+        '<b>θ</b> ← θ − η · m̂ₜ/(√v̂ₜ + ε)<span class="formula-desc">Adam обновляет все параметры θ = {W, b, γ, β} по сглаженным моментам градиента m̂ₜ (среднее) и v̂ₜ (квадрат).</span>'
+       ],
+       note:'Backprop — это применение цепного правила: градиент течёт от функции потерь к входу, обновляя веса каждого слоя. Фиолетовый поток рёбер показывает направление справа налево (схематично).',
+       mods:['mFormulaRef'], active:[], edges:-1, cards:[], chips:[], back:true},
+    ];
+
+    // DOM refs
+    const $=id=>document.getElementById(id);
+    const stepNum=$('stepNum'),stepTitle=$('stepTitle'),stepText=$('stepText'),calc=$('calc'),note=$('note'),bar=$('bar');
+
+    function clearActive(){
+      stopBackward();
+      document.querySelectorAll('.node,.layer-card,.chip-box,.compute-col').forEach(e=>e.classList.remove('active'));
+      edgeStore.flat().forEach(o=>{o.ln.setAttribute('stroke-opacity',(0.3+o.mag*0.4).toFixed(2));o.ln.setAttribute('stroke-width',(0.8+o.mag*2.6).toFixed(2));});
+      $('wlabels').innerHTML='';
+    }
+
+    // ===== анимация обратного прохода: поток градиента справа налево =====
+    const NODE_LAYERS=['output-node','h3-node','h2-node','h1-node']; // порядок назад
+    function stopBackward(){
+      if(backTimer){clearInterval(backTimer);backTimer=null;}
+      edgeStore.flat().forEach(o=>o.ln.classList.remove('grad'));
+      document.querySelectorAll('.node').forEach(n=>n.classList.remove('grad-node'));
+    }
+    function animateBackward(){
+      stopBackward();
+      const order=[3,2,1,0]; // сегменты рёбер: выход→h3, h3→h2, h2→h1, h1→вход
+      let k=0;
+      const tick=()=>{
+        edgeStore.flat().forEach(o=>o.ln.classList.remove('grad'));
+        document.querySelectorAll('.node').forEach(n=>n.classList.remove('grad-node'));
+        const i=k%order.length, si=order[i];
+        edgeStore[si].forEach(o=>o.ln.classList.add('grad'));
+        // подсветить слой-источник ошибки на этом сегменте (узлы справа)
+        document.querySelectorAll('.'+NODE_LAYERS[i]).forEach(n=>{ if(!n.classList.contains('dropped'))n.classList.add('grad-node');});
+        k++;
+      };
+      tick();
+      backTimer=setInterval(tick,750);
+    }
+
+    function applyDropout(){
+      layers.forEach(L=>{L.rows.forEach((y,i)=>{
+        const c=$(L.id+'-'+i),t=$(L.id+'-t-'+i),x=$(L.id+'-x-'+i);
+        const d=dropMask[L.id][i];
+        c.classList.toggle('dropped',d);
+        t.setAttribute('display',d?'none':'block');
+        x.setAttribute('display',d?'block':'none');
+      });});
+    }
+
+    function highlightEdges(segIdx,layerId){
+      if(segIdx<0)return;
+      const arr=edgeStore[segIdx];
+      arr.forEach(o=>{
+        const targetDropped = layerId && dropMask[layerId] ? dropMask[layerId][o.bi] : false;
+        const op = targetDropped?0.08:0.95, wd=(1.4+o.mag*2.8).toFixed(2);
+        o.ln.setAttribute('stroke-opacity',op);o.ln.setAttribute('stroke-width',wd);
+      });
+      // numeric labels on edges feeding the FIRST (top) non-dropped target neuron
+      let tgt=0; if(layerId){while(tgt<4 && dropMask[layerId][tgt])tgt++;} if(tgt>3)tgt=0;
+      const wl=$('wlabels');
+      arr.filter(o=>o.bi===tgt).forEach(o=>{
+        const mx=o.x1+(o.x2-o.x1)*0.62, my=o.y1+(o.y2-o.y1)*0.62-3;
+        wl.appendChild(el('text',{class:'wlabel',x:mx,y:my,'text-anchor':'middle',fill:wcolor(o.w)},o.w.toFixed(2)));
+      });
+    }
+
+    function renderBN(layerId){
+      if(trained && realBN && realBN[layerId]){
+        const b=realBN[layerId], sd=Math.sqrt(b.varr+1e-3);
+        const u1=b.mean+sd*0.6, norm=(u1-b.mean)/sd, y=b.gamma*norm+b.beta;
+        $('bnBox').innerHTML=
+          `γ = <span class="pill-stat">${b.gamma.toFixed(2)}</span>&nbsp; β = <span class="pill-stat">${b.beta.toFixed(2)}</span> &nbsp;<span style="color:#1f7d57">(обучены)</span><br>`+
+          `running μ = <span class="pill-stat">${b.mean.toFixed(2)}</span>&nbsp; σ = <span class="pill-stat">${sd.toFixed(2)}</span><br>`+
+          `y = γ·(u−μ)/σ + β = <b>${y.toFixed(2)}</b>`;
+        bnOut=y;return;
+      }
+      const r=mulberry32((batchSeed*40503+layerId.charCodeAt(2))>>>0);
+      const batch=Array.from({length:6},()=> +(r()*4-1.5).toFixed(2));
+      const mu=batch.reduce((a,b)=>a+b,0)/batch.length;
+      const v=batch.reduce((a,b)=>a+(b-mu)**2,0)/batch.length;
+      const sd=Math.sqrt(v+1e-3);
+      const u1=batch[0];
+      const norm=(u1-mu)/sd;
+      const gamma=+(0.9+r()*0.4).toFixed(2), beta=+((r()*0.4-0.2)).toFixed(2);
+      const y=gamma*norm+beta;
+      const src = mode==='train' ? 'по текущему mini-batch' : 'по скользящему среднему (running μ, σ)';
+      $('bnBox').innerHTML=
+        `μ = <span class="pill-stat">${mu.toFixed(2)}</span>&nbsp; σ = <span class="pill-stat">${sd.toFixed(2)}</span> &nbsp;<span style="color:#8a97a6">(${src})</span><br>`+
+        `û = (u₁−μ)/σ = (${u1.toFixed(2)}−${mu.toFixed(2)})/${sd.toFixed(2)} = <b>${norm.toFixed(2)}</b><br>`+
+        `y = γ·û + β = ${gamma}·${norm.toFixed(2)} ${beta>=0?'+':'−'} ${Math.abs(beta)} = <b>${y.toFixed(2)}</b>`;
+      bnOut=y;
+    }
+
+    // вставка-график ReLU: показывает, как пре-активация z (= выход BN) проходит через max(0,z)
+    function renderReLU(z){
+      const svg=$('reluPlot');svg.innerHTML='';
+      const X0=-3,X1=3,Y0=0,Y1=3, L=24,R=200,T=10,B=104; // поле графика
+      const px=x=>L+(x-X0)/(X1-X0)*(R-L), py=y=>B-(y-Y0)/(Y1-Y0)*(B-T);
+      const add=(t,a)=>{const e=document.createElementNS(SVGNS,t);for(const k in a)e.setAttribute(k,a[k]);svg.appendChild(e);};
+      // оси
+      add('line',{class:'relu-axis',x1:L,y1:py(0),x2:R,y2:py(0)});           // ось x (y=0)
+      add('line',{class:'relu-axis',x1:px(0),y1:T,x2:px(0),y2:B});           // ось y (x=0)
+      add('text',{class:'relu-lbl',x:R-2,y:py(0)-4,'text-anchor':'end'},);
+      svg.lastChild.textContent='z';
+      // кривая ReLU: (-3,0)→(0,0)→(3,3)
+      add('polyline',{class:'relu-curve',points:`${px(-3)},${py(0)} ${px(0)},${py(0)} ${px(3)},${py(3)}`});
+      // точка текущего z
+      const zc=Math.max(X1*-1,Math.min(X1,z)), out=Math.max(0,zc);
+      add('line',{class:'relu-guide',x1:px(zc),y1:py(0),x2:px(zc),y2:py(out)});   // вертикаль z
+      add('line',{class:'relu-guide',x1:px(0),y1:py(out),x2:px(zc),y2:py(out)});  // горизонталь на выход
+      add('circle',{class:'relu-dot',cx:px(zc),cy:py(out),r:3.6});
+      const cap=$('reluCap');
+      if(z<0) cap.innerHTML=`z = <b>${z.toFixed(2)}</b> &lt; 0 → ReLU = <b>0</b> · нейрон «молчит»`;
+      else    cap.innerHTML=`z = <b>${z.toFixed(2)}</b> ≥ 0 → ReLU = <b>${out.toFixed(2)}</b> · пропускает`;
+    }
+
+    function renderDrop(layerId,rate){
+      const dropped=dropMask[layerId].filter(Boolean).length;
+      const box=$('dropBox');
+      if(mode==='train'){
+        box.innerHTML=`<span class="drop-badge drop-on">p = ${rate}</span>`+
+          `<span>погашено <b>${dropped} из 4</b> показанных нейронов · случайно на каждом mini-batch</span>`;
+      }else{
+        box.innerHTML=`<span class="drop-badge drop-off">выкл</span>`+
+          `<span>при инференсе Dropout отключён, активны все нейроны (масштаб учтён при обучении)</span>`;
+      }
+    }
+
+    function renderHeat(layerId){
+      const cols=12, dims={h1:'4 × 128',h2:'128 × 64',h3:'64 × 32'}[layerId];
+      const grid=$('heatGrid');grid.style.gridTemplateColumns=`repeat(${cols},1fr)`;grid.innerHTML='';
+      let vals=[], rows;
+      if(trained && realW){
+        const M=realW[{h1:0,h2:1,h3:2}[layerId]];
+        rows=Math.min(8,M.length);let maxabs=1e-6;
+        for(let i=0;i<rows;i++)for(let j=0;j<cols;j++)maxabs=Math.max(maxabs,Math.abs(M[i][j]));
+        for(let i=0;i<rows;i++)for(let j=0;j<cols;j++)vals.push(M[i][j]/maxabs);
+        $('heatCap').textContent=`W (${dims}) · реальные веса, фрагмент ${rows}×${cols}`;
+      }else{
+        rows=8;const r=mulberry32((layerId.charCodeAt(2)*97+13)>>>0);
+        for(let i=0;i<rows*cols;i++)vals.push(r()*2-1);
+        $('heatCap').textContent=`W (${dims}) · схематично, фрагмент 8×12`;
+      }
+      vals.forEach(w=>{const a=Math.min(1,Math.abs(w));
+        const col = w>=0 ? `rgba(199,91,74,${(0.12+a*0.88).toFixed(2)})` : `rgba(63,127,196,${(0.12+a*0.88).toFixed(2)})`;
+        const cell=document.createElement('div');cell.className='heat-cell';cell.style.background=col;grid.appendChild(cell);});
+    }
+
+    function renderFormulaRef(formulas){
+      const box=$('formulaBox');box.innerHTML='';
+      formulas.forEach(f=>{
+        const row=document.createElement('div');
+        row.className='formula-line';
+        row.innerHTML=f;
+        box.appendChild(row);
+      });
+    }
+
+    function render(){
+      clearActive();
+      const d=steps[step];
+      stepNum.textContent=`Шаг ${step+1} из ${steps.length}`;
+      stepTitle.textContent=d.title;
+      stepText.textContent=d.text;
+      calc.innerHTML=d.calc;
+      note.textContent=d.note;
+      bar.style.width=`${((step+1)/steps.length)*100}%`;
+
+      d.active.forEach(c=>document.querySelectorAll('.'+c).forEach(e=>{ if(!e.classList.contains('dropped'))e.classList.add('active');}));
+      d.cards.forEach(c=>document.querySelectorAll('.'+c).forEach(e=>e.classList.add('active')));
+      d.chips.forEach(c=>document.querySelectorAll('.'+c).forEach(e=>e.classList.add('active')));
+      $('cap-'+d.key)?.classList.add('active');
+      highlightEdges(d.edges,d.layer);
+
+      // modules
+      ['mSHAP','mBN','mReLU','mDrop','mWeights','mFormulaRef','mOut'].forEach(m=>$(m).hidden=!d.mods.includes(m));
+      if(d.layer){renderBN(d.layer);renderReLU(bnOut);renderDrop(d.layer,layers.find(l=>l.id===d.layer).drop);renderHeat(d.layer);}
+      if(d.mods.includes('mFormulaRef')) renderFormulaRef(d.formulas || []);
+
+      applyDropout();
+      // re-apply active (dropped neurons shouldn't be active)
+      d.active.forEach(c=>document.querySelectorAll('.'+c).forEach(e=>{ if(e.classList.contains('dropped'))e.classList.remove('active');}));
+
+      // под схемой: прямой проход или backprop
+      const back=!!d.back;
+      $('computeRow').setAttribute('display',back?'none':'inline');
+      $('mathHead').setAttribute('display',back?'none':'inline');
+      $('backRow').setAttribute('display',back?'inline':'none');
+      $('backHead').setAttribute('display',back?'inline':'none');
+      if(back) animateBackward();
+    }
+
+    // mode toggle
+    document.getElementById('modeSeg').addEventListener('click',e=>{
+      const b=e.target.closest('button');if(!b)return;
+      mode=b.dataset.mode;
+      [...e.currentTarget.children].forEach(c=>c.classList.toggle('on',c===b));
+      sampleDropout();render();
+    });
+    document.getElementById('shuffle').addEventListener('click',()=>{batchSeed++;sampleDropout();render();});
+    $('next').addEventListener('click',()=>{step=(step+1)%steps.length;render();});
+    $('prev').addEventListener('click',()=>{step=(step-1+steps.length)%steps.length;render();});
+    $('reset').addEventListener('click',()=>{step=0;if(timer){clearInterval(timer);timer=null;}render();});
+    $('auto').addEventListener('click',()=>{
+      if(timer){clearInterval(timer);timer=null;return;}
+      timer=setInterval(()=>{step=(step+1)%steps.length;if(step>0&&step<4&&mode==='train'){batchSeed++;sampleDropout();}render();},2200);
+    });
+
+    // ===== реальное обучение (TensorFlow.js) =====
+    function standardizeStats(X,y){
+      const n=X.length,d=X[0].length;
+      featMean=Array(d).fill(0);featStd=Array(d).fill(0);
+      for(const row of X)row.forEach((v,j)=>featMean[j]+=v);featMean=featMean.map(s=>s/n);
+      for(const row of X)row.forEach((v,j)=>featStd[j]+=(v-featMean[j])**2);featStd=featStd.map(s=>Math.sqrt(s/n)||1);
+      yMean=y.reduce((a,b)=>a+b,0)/n;
+      yStd=Math.sqrt(y.reduce((a,b)=>a+(b-yMean)**2,0)/n)||1;
+    }
+    const zX=row=>row.map((v,j)=>(v-featMean[j])/featStd[j]);
+
+    function buildModel(){
+      const m=tf.sequential();
+      m.add(tf.layers.dense({units:128,inputShape:[4],kernelInitializer:'heNormal'}));
+      m.add(tf.layers.batchNormalization());m.add(tf.layers.activation({activation:'relu'}));m.add(tf.layers.dropout({rate:0.2}));
+      m.add(tf.layers.dense({units:64,kernelInitializer:'heNormal'}));
+      m.add(tf.layers.batchNormalization());m.add(tf.layers.activation({activation:'relu'}));m.add(tf.layers.dropout({rate:0.2}));
+      m.add(tf.layers.dense({units:32,kernelInitializer:'heNormal'}));
+      m.add(tf.layers.batchNormalization());m.add(tf.layers.activation({activation:'relu'}));m.add(tf.layers.dropout({rate:0.1}));
+      m.add(tf.layers.dense({units:1}));
+      m.compile({optimizer:tf.train.adam(0.005),loss:'meanSquaredError',metrics:['mae']});
+      return m;
+    }
+
+    async function readWeights(model){
+      // Скачиваем с GPU ТОЛЬКО отображаемые фрагменты (а не полные матрицы),
+      // иначе .array() форсирует тяжёлую синхронизацию GPU→CPU и подвешивает UI.
+      const slc=(li,r,c)=>{const W=model.layers[li].getWeights()[0]; // переменная модели, не dispose!
+        return W.slice([0,0],[Math.min(r,W.shape[0]),Math.min(c,W.shape[1])]);};
+      const ts=[slc(0,4,12),slc(4,8,12),slc(8,8,12),slc(12,4,1)];
+      const mats=[];for(const t of ts){mats.push(await t.array());t.dispose();}
+      const bn={},bidx={h1:1,h2:5,h3:9};
+      for(const k in bidx){const ws=model.layers[bidx[k]].getWeights();
+        const g=ws[0].slice([0],[1]),be=ws[1].slice([0],[1]),mm=ws[2].slice([0],[1]),mv=ws[3].slice([0],[1]);
+        bn[k]={gamma:(await g.array())[0],beta:(await be.array())[0],mean:(await mm.array())[0],varr:(await mv.array())[0]};
+        [g,be,mm,mv].forEach(t=>t.dispose());}
+      return {mats,bn};
+    }
+
+    function applyRealWeights(mats){
+      edgeStore.forEach((arr,si)=>{const M=mats[si];let maxabs=1e-6;
+        arr.forEach(o=>{const w=si===3?M[o.ai][0]:M[o.ai][o.bi];o.w=+w.toFixed(2);maxabs=Math.max(maxabs,Math.abs(w));});
+        arr.forEach(o=>{o.mag=Math.min(1,Math.abs(o.w)/maxabs);o.ln.setAttribute('stroke',wcolor(o.w));});
+      });
+      realW=mats;trained=true;
+    }
+
+    function drawLoss(){
+      const c=$('lossCanvas'),ctx=c.getContext('2d'),W=c.width,H=c.height;
+      ctx.clearRect(0,0,W,H);if(lossHist.length<2)return;
+      const max=Math.max(...lossHist.map(p=>Math.max(p.t,p.v)))||1;
+      const px=i=>10+i/(lossHist.length-1)*(W-20), py=v=>H-8-v/max*(H-18);
+      const line=(k,col)=>{ctx.strokeStyle=col;ctx.lineWidth=2;ctx.beginPath();
+        lossHist.forEach((p,i)=>{const x=px(i),y=py(p[k]);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.stroke();};
+      line('t','#1f7d57');line('v','#c98a1a');
+      ctx.fillStyle='#1f7d57';ctx.font='10px sans-serif';ctx.fillText('train',12,12);
+      ctx.fillStyle='#c98a1a';ctx.fillText('val',52,12);
+    }
+
+    // во время обучения подсвечиваем веса по ВСЕЙ сети (а не только активный слой),
+    // чтобы было видно, как они меняются от эпохи к эпохе
+    function showAllWeights(){
+      edgeStore.flat().forEach(o=>{
+        o.ln.setAttribute('stroke',wcolor(o.w));
+        o.ln.setAttribute('stroke-opacity',(0.35+o.mag*0.55).toFixed(2));
+        o.ln.setAttribute('stroke-width',(0.8+o.mag*3).toFixed(2));
+      });
+    }
+
+    async function trainModel(){
+      if(typeof tf==='undefined'){alert('Не удалось загрузить TensorFlow.js — нужен интернет при первом открытии файла.');return;}
+      if(!window.MLP_DATA){alert('Рядом с HTML не найден mlp_dataset.js с реальными данными.');return;}
+      const btn=$('trainBtn');btn.disabled=true;btn.classList.remove('done');btn.textContent='Обучение…';
+      $('trainhud').hidden=false;lossHist.length=0;
+      if(tfModel){tfModel.dispose();tfModel=null;}
+      step=1;render();
+      // используем GPU (WebGL); даём UI отрисоваться до тяжёлой подготовки
+      try{await tf.setBackend('webgl');}catch(e){}
+      await tf.ready();await tf.nextFrame();
+
+      const X=window.MLP_DATA.X,y=window.MLP_DATA.y;
+      standardizeStats(X,y);
+      const idx=[...y.keys()],r=mulberry32(12345);
+      for(let i=idx.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}
+      const nVal=Math.floor(idx.length*0.15),valIdx=idx.slice(0,nVal),trIdx=idx.slice(nVal);
+      const mk=ids=>({x:ids.map(i=>zX(X[i])),y:ids.map(i=>[(y[i]-yMean)/yStd])});
+      const tr=mk(trIdx),va=mk(valIdx);
+      const xtr=tf.tensor2d(tr.x),ytr=tf.tensor2d(tr.y),xva=tf.tensor2d(va.x),yva=tf.tensor2d(va.y);
+      const model=buildModel();tfModel=model;
+      const EPOCHS=60;$('thEpoch').textContent=`0/${EPOCHS}`;
+      training=true;
+      // визуально включаем режим «Обучение», чтобы был виден Dropout
+      mode='train';
+      document.querySelectorAll('#modeSeg button').forEach(b=>b.classList.toggle('on',b.dataset.mode==='train'));
+
+      // обучаем ПО ОДНОЙ эпохе и перерисовываем между ними — тогда видно, как меняются веса
+      for(let ep=0; ep<EPOCHS; ep++){
+        const h=await model.fit(xtr,ytr,{epochs:1,batchSize:32,validationData:[xva,yva],verbose:0,shuffle:true});
+        const loss=h.history.loss[0], vloss=h.history.val_loss[0];
+        const vmae=h.history.val_mae?h.history.val_mae[0]:Math.sqrt(vloss);
+        lossHist.push({t:loss,v:vloss});
+        $('thEpoch').textContent=`${ep+1}/${EPOCHS}`;
+        $('thLoss').textContent=loss.toFixed(3);
+        $('thMae').textContent=(vmae*yStd).toFixed(3);
+        drawLoss();
+        // веса обновляем КАЖДУЮ эпоху (скачиваем только маленькие фрагменты — это дёшево)
+        const {mats,bn}=await readWeights(model);applyRealWeights(mats);realBN=bn;
+        const inp=tf.tensor2d([zX(EXAMPLE)]),pz=model.predict(inp);
+        predLambda=(await pz.array())[0][0]*yStd+yMean;pz.dispose();inp.dispose();
+        const outSub=document.querySelector('#output .node-sub');if(outSub)outSub.textContent=predLambda.toFixed(2);
+        // переразыгрываем Dropout — видно, как на каждом проходе гасятся разные нейроны
+        batchSeed++;sampleDropout();
+        // прокручиваем пошаговую панель по кругу: вход → слои → выход → обратный проход.
+        // так на каждой эпохе видно полный цикл «прямой проход → ошибка → backprop → обновление весов»
+        step = ep % steps.length;
+        render();
+        showAllWeights();           // подсветить веса по всей сети
+        await tf.nextFrame();       // даём браузеру перерисовать кадр
+        // на шаге backprop задерживаемся чуть дольше, чтобы был виден фиолетовый поток градиента
+        await sleep(steps[step].back ? 500 : 20);
+      }
+      training=false;
+
+      // финальный R² на валидации (в исходных единицах через инвариантность к масштабу)
+      const r2t=tf.tidy(()=>{const p=model.predict(xva);const ss_res=p.sub(yva).square().sum();
+        const ss_tot=yva.sub(yva.mean()).square().sum();return tf.scalar(1).sub(ss_res.div(ss_tot));});
+      $('thR2').textContent=(await r2t.array()).toFixed(3);r2t.dispose();
+      [xtr,ytr,xva,yva].forEach(t=>t.dispose());
+
+      const fn=$('wfootnote');if(fn){fn.textContent='обучены на реальных данных';fn.setAttribute('fill','#1f7d57');}
+      if(predLambda!=null){
+        steps[4].calc=`λ̂ = <span class="b">Wₒ·h₃</span> + bₒ   →   <span class="g">${predLambda.toFixed(2)}</span> Вт/(м·К)\nMSE = (1/n)·Σ(λ − λ̂)²\nMAE = (1/n)·Σ|λ − λ̂|\nAdam: m_t, v_t → θ ← θ − η·m̂_t/(√v̂_t + ε)`;
+      }
+      btn.disabled=false;btn.classList.add('done');btn.textContent='Обучить заново';
+      step=4;render();   // по завершении показываем итоговый шаг «Выход: прогноз λ» с обученным результатом
+    }
+    $('trainBtn').addEventListener('click',trainModel);
+
+    render();
+  </script>
+
+  <!-- ===== все формулы вычисления в LaTeX (рендер KaTeX) ===== -->
+  <script>
+    const ALL_FORMULAS=[
+      {title:'1. Вход и стандартизация', items:[
+        {tex:'\\mathbf{x} = [\\,\\Phi,\\ V_p,\\ S,\\ L\\,]', desc:'Вектор входных признаков: пористость, скорость P-волн, насыщение, литология.'},
+        {tex:'z_j = \\dfrac{x_j - \\mu_j}{\\sigma_j}', desc:'Z-стандартизация каждого признака: вычитается среднее μ_j, делится на СКО σ_j.'},
+        {tex:'\\hat{y} = f_\\theta(\\mathbf{z}),\\quad \\theta=\\{W,\\,b,\\,\\gamma,\\,\\beta\\}', desc:'Сеть как функция нормированного входа с обучаемыми параметрами θ.'},
+      ]},
+      {title:'2. Полносвязный слой (Dense)', items:[
+        {tex:'\\mathbf{u}_\\ell = W_\\ell\\,\\mathbf{h}_{\\ell-1} + \\mathbf{b}_\\ell', desc:'Линейная комбинация входов слоя (для первого слоя h₀ = z).'},
+        {tex:'W_1\\!\\in\\!\\mathbb{R}^{4\\times128},\\; W_2\\!\\in\\!\\mathbb{R}^{128\\times64},\\; W_3\\!\\in\\!\\mathbb{R}^{64\\times32},\\; W_o\\!\\in\\!\\mathbb{R}^{32\\times1}', desc:'Размерности матриц весов по слоям сети.'},
+      ]},
+      {title:'3. Batch Normalization', items:[
+        {tex:'\\mu_B=\\dfrac{1}{m}\\sum_{i=1}^{m}u_i,\\qquad \\sigma_B^2=\\dfrac{1}{m}\\sum_{i=1}^{m}(u_i-\\mu_B)^2', desc:'Среднее и дисперсия пре-активаций по mini-batch размера m.'},
+        {tex:'\\hat{u}=\\gamma\\,\\dfrac{u-\\mu_B}{\\sqrt{\\sigma_B^2+\\varepsilon}}+\\beta', desc:'Нормализация распределения с обучаемыми масштабом γ и сдвигом β.'},
+      ]},
+      {title:'4. Активация ReLU', items:[
+        {tex:'a_\\ell=\\operatorname{ReLU}(\\hat{u}_\\ell)=\\max(0,\\;\\hat{u}_\\ell)', desc:'Нелинейность: отрицательные значения обнуляются, положительные проходят.'},
+      ]},
+      {title:'5. Dropout', items:[
+        {tex:'\\mathbf{h}_\\ell=\\dfrac{\\mathbf{m}_\\ell\\odot\\mathbf{a}_\\ell}{1-p}', desc:'Маска m_ℓ случайно гасит нейроны; деление на (1−p) сохраняет масштаб. p = 0.2 (слои 1–2), p = 0.1 (слой 3). ⊙ — поэлементное умножение.'},
+      ]},
+      {title:'6. Выход — регрессия λ', items:[
+        {tex:'\\hat{\\lambda}=W_o\\,\\mathbf{h}_3+b_o', desc:'Линейный нейрон превращает 32 скрытых признака в прогноз теплопроводности.'},
+      ]},
+      {title:'7. Функция потерь и метрики', items:[
+        {tex:'\\mathrm{MSE}=L=\\dfrac{1}{n}\\sum_{i=1}^{n}(\\lambda_i-\\hat{\\lambda}_i)^2', desc:'Среднеквадратичная ошибка — минимизируемая функция потерь.'},
+        {tex:'\\mathrm{RMSE}=\\sqrt{\\mathrm{MSE}}', desc:'Корень из MSE, возвращает ошибку в Вт/(м·К).'},
+        {tex:'\\mathrm{MAE}=\\dfrac{1}{n}\\sum_{i=1}^{n}\\lvert\\lambda_i-\\hat{\\lambda}_i\\rvert', desc:'Средняя абсолютная ошибка.'},
+        {tex:'\\mathrm{MAPE}=\\dfrac{100\\%}{n}\\sum_{i=1}^{n}\\left\\lvert\\dfrac{\\lambda_i-\\hat{\\lambda}_i}{\\lambda_i}\\right\\rvert', desc:'Средняя относительная ошибка в процентах.'},
+        {tex:'R^2=1-\\dfrac{\\mathrm{SS_{res}}}{\\mathrm{SS_{tot}}}=1-\\dfrac{\\sum_i(\\lambda_i-\\hat{\\lambda}_i)^2}{\\sum_i(\\lambda_i-\\bar{\\lambda})^2}', desc:'Коэффициент детерминации — доля объяснённого разброса λ.'},
+      ]},
+      {title:'8. Обратный проход (backprop)', items:[
+        {tex:'\\delta_{\\text{out}}=\\dfrac{\\partial L}{\\partial\\hat{\\lambda}}=-\\dfrac{2}{n}(\\lambda-\\hat{\\lambda})', desc:'Ошибка на выходе — производная MSE по прогнозу λ̂.'},
+        {tex:'\\delta_\\ell=\\bigl(W_{\\ell+1}^{\\mathsf{T}}\\,\\delta_{\\ell+1}\\bigr)\\odot[\\hat{u}_\\ell>0]', desc:'Градиент слоя ℓ по цепному правилу: ошибка протягивается через Wᵀ и производную ReLU.'},
+        {tex:'\\dfrac{\\partial L}{\\partial W_\\ell}=\\delta_\\ell\\,\\mathbf{h}_{\\ell-1}^{\\mathsf{T}},\\qquad \\dfrac{\\partial L}{\\partial b_\\ell}=\\delta_\\ell', desc:'Градиенты по весам и смещениям слоя.'},
+      ]},
+      {title:'9. Оптимизатор Adam', items:[
+        {tex:'m_t=\\beta_1 m_{t-1}+(1-\\beta_1)\\,g_t', desc:'Первый момент — сглаженное среднее градиента g_t.'},
+        {tex:'v_t=\\beta_2 v_{t-1}+(1-\\beta_2)\\,g_t^{2}', desc:'Второй момент — сглаженный квадрат градиента.'},
+        {tex:'\\hat{m}_t=\\dfrac{m_t}{1-\\beta_1^{\\,t}},\\qquad \\hat{v}_t=\\dfrac{v_t}{1-\\beta_2^{\\,t}}', desc:'Коррекция смещения моментов на ранних шагах.'},
+        {tex:'\\theta\\leftarrow\\theta-\\eta\\,\\dfrac{\\hat{m}_t}{\\sqrt{\\hat{v}_t}+\\varepsilon}', desc:'Обновление параметров θ = {W, b, γ, β}, скорость обучения η = 0.005.'},
+      ]},
+    ];
+
+    function buildAllFormulas(){
+      const grid=document.getElementById('faGrid');
+      if(!grid) return;
+      const katexReady = (typeof katex!=='undefined');
+      grid.innerHTML='';
+      ALL_FORMULAS.forEach(g=>{
+        const group=document.createElement('div');group.className='fa-group';
+        const h=document.createElement('h3');h.textContent=g.title;group.appendChild(h);
+        g.items.forEach(it=>{
+          const item=document.createElement('div');item.className='fa-item';
+          const f=document.createElement('div');f.className='fa-formula';
+          if(katexReady){
+            try{ katex.render(it.tex,f,{displayMode:true,throwOnError:false}); }
+            catch(e){ f.textContent=it.tex; }
+          }else{ f.textContent=it.tex; }
+          item.appendChild(f);
+          const d=document.createElement('div');d.className='fa-desc';d.textContent=it.desc;
+          item.appendChild(d);
+          group.appendChild(item);
+        });
+        grid.appendChild(group);
+      });
+    }
+
+    // KaTeX подключён с defer — рендерим после готовности DOM и скрипта
+    if(document.readyState==='loading'){
+      document.addEventListener('DOMContentLoaded',buildAllFormulas);
+    }else{
+      buildAllFormulas();
+    }
+    // подстраховка, если defer-скрипт KaTeX ещё не успел выполниться
+    window.addEventListener('load',()=>{ if(typeof katex!=='undefined') buildAllFormulas(); });
+
+    document.getElementById('faToggle').addEventListener('click',e=>{
+      const grid=document.getElementById('faGrid');
+      const hidden=grid.classList.toggle('fa-hidden');
+      e.target.textContent=hidden?'Показать формулы':'Скрыть формулы';
+    });
+  </script>
+</body>
+</html>
